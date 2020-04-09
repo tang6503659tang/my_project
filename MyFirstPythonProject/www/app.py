@@ -13,4 +13,3 @@ def init():
     logging.info("Server started at 127.0.0.1...")
     web.run_app(app,host='127.0.0.1',port=8080)
 
-init()
