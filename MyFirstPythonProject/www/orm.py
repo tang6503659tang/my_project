@@ -164,6 +164,21 @@ class Model(dict,metaclass=ModelMetaclass): #base class. use 元类
         if len(rs)==0:
             return None
         return rs[0]['_num_']
+
+    @asyncio.coroutine
+    def update(self):
+        args=list(map(self.getValue,self.__fields__))
+        args.append(self.getValue(self.__primary_key__))
+        rows = yield from execute(self.__update__,args)
+        if rows !=1:
+            logging.warning('failed to update by primary key: affected rows: %s' % rows)
+    @asyncio.coroutine
+    def remove(self):
+        args=[self.getValue(self.__primary_key__)]
+        rows=yield from execute(self.__delete__,args)
+        if rows!=1:
+            logging.warning('failed to remove by primary key: affected rows: %s' % rows)
+
     @asyncio.coroutine
     def save(self):
         args=list(map(self.getValueOrDefault,self.__fields__))
@@ -198,7 +213,3 @@ class FloatField(Field):
 class TextField(Field):
     def __init__(self,name=None,default=None): # text is not allowned to be set as primary key
         super().__init__(name,'text',False,default)
-
-
-
-
