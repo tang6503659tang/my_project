@@ -55,6 +55,44 @@ def create_args_string(num):
     for i in range(num):
         L.append('?')
     return ', '.join(L)
+class ModelMetaclass(type): # magic ...
+    def __new__(cls, name, bases,attrs):
+        # take out Model itself
+        if name=="Model":
+            return type.__new__(cls,name,bases,attrs)
+        # get table name
+        tableName=attrs.get('__table__',None) or name
+        logging.info('found model: %s (table %s)' % (name,tableName))
+        # get all fields and key
+        mappings=dict()
+        fields=[]
+        primaryKey =None
+        for k,v in attrs.items():
+            if isinstance(v,Field):
+                logging.info(' found mapping: %s ==> %s' % (k,v))
+                mappings[k]=v
+                if v.primary_key:
+                    if primaryKey:
+                        raise RuntimeError('Duplicate primary key for field: %s' % k)
+                    primaryKey=k
+                else:
+                    fields.append(k)
+        if not primaryKey:
+            raise RuntimeError("Primary key not found.")
+        for k in mappings.keys():
+            attrs.pop(k)
+        escaped_fields=list(map(lambda f:'`%s`' % f,fields))
+        attrs['__mappings__']=mappings # save mapping
+        attrs['__table__']= tableName
+        attrs['__primary_key__']=primaryKey
+        attrs['__fields__']=fields # fields except primary key
+        attrs['__select__']="select `%s` ,%s from `%s`" % (primaryKey,','.join(escaped_fields),tableName)
+        attrs['__insert__']="insert into `%s` (%s,`%s`) values (%s)" % (tableName,','.join(escaped_fields),
+                                primaryKey,create_args_string(len(escaped_fields)+1))
+        attrs['__update__']='update `%s` set %s where `%s` =?' %(tableName,
+                                ", ".join(map(lambda f: "`%s=?" % (mappings.get(f).name or f),fields)),primaryKey)
+        attrs['__delete__']='delete from `%s` where `%s` =? '%(tableName,primaryKey)
+        return type.__new__(cls,name,bases,attrs)
 
 
 class Model(dict,metaclass=ModelMetaclass): #base class. use 元类
@@ -113,6 +151,19 @@ class Model(dict,metaclass=ModelMetaclass): #base class. use 元类
                 raise ValueError('Invalid limit value: %s' % str(limit))
         rs = yield from select(" ".join(sql),args)
         return [cls(**r) for r in rs]
+
+    @classmethod
+    @asyncio.coroutine
+    def findNumber(cls,selectField,where=None,args=None):
+        'find number by select and where clause'
+        sql=['select %s _num_ from `%s`' % (selectField,cls.__table__)]
+        if where:
+            sql.append("where")
+            sql.append(where)
+        rs =yield from select(" ".join(sql),args,1)
+        if len(rs)==0:
+            return None
+        return rs[0]['_num_']
     @asyncio.coroutine
     def save(self):
         args=list(map(self.getValueOrDefault,self.__fields__))
@@ -135,44 +186,19 @@ class StringField(Field): # mapping varchar
     def __init__(self,name=None,primary_key=False,default=None,ddl="varchar(100)"):
         super().__init__(name,ddl,primary_key,default)
 
-class ModelMetaclass(type): # magic ...
-    def __new__(cls, name, bases,attrs):
-        # take out Model itself
-        if name=="Model":
-            return type.__new__(cls,name,bases,attrs)
-        # get table name
-        tableName=attrs.get('__table__',None) or name
-        logging.info('found model: %s (table %s)' % (name,tableName))
-        # get all fields and key
-        mappings=dict()
-        fields=[]
-        primaryKey =None
-        for k,v in attrs.items():
-            if isinstance(v,Field):
-                logging.info(' found mapping: %s ==> %s' % (k,v))
-                mappings[k]=v
-                if v.primary_key:
-                    if primaryKey:
-                        raise RuntimeError('Duplicate primary key for field: %s' % k)
-                    primaryKey=k
-                else:
-                    fields.append(k)
-        if not primaryKey:
-            raise RuntimeError("Primary key not found.")
-        for k in mappings.keys():
-            attrs.pop(k)
-        escaped_fields=list(map(lambda f:'`%s`' % f,fields))
-        attrs['__mappings__']=mappings # save mapping
-        attrs['__table__']= tableName
-        attrs['__primary_key__']=primaryKey
-        attrs['__fields__']=fields # fields except primary key
-        attrs['__select__']="select `%s` ,%s from `%s`" % (primaryKey,','.join(escaped_fields),tableName)
-        attrs['__insert__']="insert into `%s` (%s,`%s`) values (%s)" % (tableName,','.join(escaped_fields),
-                                primaryKey,create_args_string(len(escaped_fields)+1))
-        attrs['__update__']='update `%s` set %s where `%s` =?' %(tableName,
-                                ", ".join(map(lambda f: "`%s=?" % (mappings.get(f).name or f),fields)),primaryKey)
-        attrs['__delete__']='delete from `%s` where `%s` =? '%(tableName,primaryKey)
-        return type.__new__(cls,name,bases,attrs)
+class BooleanField(Field):
+    def __init__(self,name=None,default=False): #boolean is not allowned to be set as primary key
+        super().__init__(name,'boolean',False,default)
+class IntegerField(Field):
+    def __init__(self,name=None,primary_key=False,default=0):
+        super().__init__(name,"bigint",primary_key,default)
+class FloatField(Field):
+    def __init__(self,name=None,primary_key=False,default=0.0):
+        super().__init__(name,"real",primary_key,default)
+class TextField(Field):
+    def __init__(self,name=None,default=None): # text is not allowned to be set as primary key
+        super().__init__(name,'text',False,default)
+
 
 
 
