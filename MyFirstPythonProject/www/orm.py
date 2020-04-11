@@ -8,19 +8,21 @@ def log(sql,args=()):
 """
 create a global pool
 """
+@asyncio.coroutine
 def create_pool(loop,**kw):
     logging.info("create database connection pool...")
     global __pool #global variable
-    __pool=aiomysql.create_pool(
-        host=kw.get("host","localhost"),
-        port=kw.get("port","3306"),
-        user=kw["user"],
-        password=kw["password"],
-        db=kw["db"],
-        charset=kw.get("charset","utf-8"),
-        autocommit=kw.get("autocommit",True),
-        maxsize=kw.get("maxsize",10),
-        minsize=kw.get("minsize",1)
+    __pool = yield from aiomysql.create_pool(
+        host=kw.get('host', 'localhost'), #if input has an attr named host,get its value, otherwise set default as localhost
+        port=kw.get('port', 3306),
+        user=kw['user'],
+        password=kw['password'],
+        db=kw['db'],
+        charset=kw.get('charset', 'utf8'),
+        autocommit=kw.get('autocommit', True),
+        maxsize=kw.get('maxsize', 10),
+        minsize=kw.get('minsize', 1),
+        loop=loop
     )
 @asyncio.coroutine
 def select(sql,args,size=None):#implement "select from"

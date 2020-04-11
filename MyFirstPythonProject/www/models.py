@@ -1,8 +1,8 @@
 import time,uuid
-from orm import Model,StringField,BooleanField,FloatField,TextField
+from www.orm import Model,StringField,BooleanField,FloatField,TextField
 
 def next_id():
-    return "%015d%s000" % (int(time.time),uuid.uuid4().hex)
+    return "%015d%s000" % (int(time.time()),uuid.uuid4().hex)
 
 class User(Model): #User for creating new users
     __table__='users'
@@ -13,7 +13,7 @@ class User(Model): #User for creating new users
     admin=BooleanField()
     name=StringField(ddl="varchar(50)")
     image=StringField(ddl='varchar(500)')
-    created_at=FloatField(default=time.time)
+    created_at=FloatField(default=time.time())
 
 class Blog(Model): # Blog for creating new blogs
     __table__="blogs"
@@ -25,7 +25,7 @@ class Blog(Model): # Blog for creating new blogs
     name=StringField(ddl='varchar(50)')
     summary=StringField(ddl='varchar(200)')
     content=TextField()
-    created_at=FloatField(default=time.time)
+    created_at=FloatField(default=time.time())
 
 class Comment(Model): # Comment for creating new comment
     __table__="comments"
@@ -35,5 +35,5 @@ class Comment(Model): # Comment for creating new comment
     user_id=StringField(ddl='varchar(50)')
     user_name=StringField(ddl='varchar(50)')
     content=TextField()
-    created_at=FloatField(default=time.time)
+    created_at=FloatField(default=time.time())
 
