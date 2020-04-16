@@ -63,6 +63,48 @@ def add_routes(app,module_name):# auto-scanning for add_route
                 add_route(app,fn)
 
 
+def get_required_kw_args(fn):
+    args=[]
+    parms=inspect.signature(fn).parameters #return the input parameters of a callable object
+    for name,parm in parms.items():
+        if parm.kind == inspect.Parameter.KEYWORD_ONLY and parm.default == inspect.Parameter.empty:
+            args.append(name) #return input that needed to fill and not positional
+    return tuple(args)
+
+def get_named_kw_args(fn):
+    args=[]
+    params = inspect.signature(fn).parameters
+    for name,param in params.items():
+        if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            args.append(name)   #return input that has keyword but not postitional
+    return tuple(args)
+
+def has_named_kw_arg(fn):
+    params = inspect.signature(fn).parameters
+    for param in params.values():
+        if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            return True
+def has_var_kw_arg(fn):
+    params = inspect.signature(fn).parameters
+    for param in params.values():
+        if param.kind == inspect.Parameter.VAR_KEYWORD: # **kw
+            return True
+
+def has_request_arg(fn):
+    sig=inspect.signature(fn)
+    params = sig.parameters
+    found = False
+    for name, param in params.items():
+        if name == 'request':
+            found=True
+            continue
+        if found and (param.kind != inspect.Parameter.VAR_KEYWORD and param.kind != inspect.Parameter.VAR_POSITIONAL
+                      and param.kind != inspect.Parameter.KEYWORD_ONLY):
+            raise ValueError('request parameter must be the last named parameter in function %s%s' % (fn.__name__,str(sig)))
+    return found
+
+
+
 class RequestHandler(object):
     '''
     using for handling request
@@ -70,8 +112,36 @@ class RequestHandler(object):
     def __index__(self,app,fn):
         self.app=app
         self.fn=fn
-    @asyncio.coroutine
-    def __call__(self,request):
-        kw=...
-        r= yield from self._func(**kw)
-        return r
+        self._required_kw_args=get_required_kw_args(fn)
+        self._named_kw_args=get_named_kw_args(fn)
+        self._has_named_kw_arg=has_named_kw_arg(fn)
+        self._has_var_kw_arg=has_var_kw_arg(fn)
+        self._has_request_arg=has_request_arg(fn)
+    async def __call__(self, request):
+        kw = None
+        if self._has_var_kw_arg or self._has_named_kw_arg or self._has_request_arg:
+            if request.method=='post':  # use post method
+                if not request.content_type:
+                    return web.HTTPBadRequest("Missing Content-Type!") # data form
+                ct=request.content_type.lower()
+                if ct.startswith('application/json'):
+                    params = await request.json()
+                    if not isinstance(params,dict):
+                        return web.HTTPBadRequest("JSON body must be object!")
+                    kw = params
+                elif ct.startswith('application/x-www-form-urlencoded') or ct.startswith('multipart/form-data'):
+                    params = await request.post()
+                    kw = dict(**params)
+                else:
+                    return web.HTTPBadRequest("Unsupported Content-Type: %s" % request.content_type)
+            if request.method == 'get':
+                qs = request.query_string
+                if qs:
+                    kw=dict()
+                    for k,v in parse.parse_qs(qs,True).items():
+                        kw[k] = v[0]
+            if kw is None:
+                kw=dict(**request.match_info)
+            else:
+                pass
+
