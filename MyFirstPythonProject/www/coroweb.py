@@ -62,6 +62,10 @@ def add_routes(app,module_name):# auto-scanning for add_route
             if method and path:
                 add_route(app,fn)
 
+def add_static(app):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    app.router.add_static('/static/', path)
+    logging.info('add static %s => %s' % ('/static/', path))
 
 def get_required_kw_args(fn):
     args=[]
@@ -109,9 +113,9 @@ class RequestHandler(object):
     '''
     using for handling request
     '''
-    def __index__(self,app,fn):
-        self.app=app
-        self.fn=fn
+    def __init__(self,app,fn):
+        self._app=app
+        self._func=fn
         self._required_kw_args=get_required_kw_args(fn)
         self._named_kw_args=get_named_kw_args(fn)
         self._has_named_kw_arg=has_named_kw_arg(fn)
@@ -143,5 +147,27 @@ class RequestHandler(object):
             if kw is None:
                 kw=dict(**request.match_info)
             else:
-                pass
+                if not self._has_var_kw_arg and self._has_named_kw_arg:
+                    copy = dict()
+                    for name in self._named_kw_args:
+                        if name in kw:
+                             copy[name]=kw[name]
+                    kw=copy # remove all unnamed kw
+
+                # check named arg
+                for k,v in request.match_info.items():
+                    if k in kw:
+                        logging.warning('Duplicate arg name in named args and kw args: %s' % k)
+                    kw[k]=v
+            if self._has_request_arg:
+                kw['request']=request
+            if self._required_kw_args:
+                for name in self._required_kw_args:
+                    if not name in kw:
+                        return web.HTTPBadRequest("Missing argument: %s" % name)
+            logging.info('Call with args: %s' % str(kw))
+            try:
+                r = await self._func(**kw)
+            except APIError as e:
+                return dict(error=e.error,data=e.data,message=e.message)
 

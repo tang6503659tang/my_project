@@ -5,18 +5,23 @@ from datetime import datetime
 from aiohttp import web
 from jinja2 import Environment,FileSystemLoader
 from www import orm
-from www.coroweb import add_routes
+from www.coroweb import add_routes,add_static
 
 async def index(request):
     return web.Response(body=b'<h1> Hello, my friends!</h1>',content_type="text/html")
 
 async def init(loop):
-        await orm.create_pool(loop,host='127.0.0.1',port=3306,user='www-data',password='www-data',ab='web_practice')
-        app=web.Application(loop=loop,middlewares=[logger_factory,response_factory])
-        init_jinja2(app,filters=dict(datetime=datetime_filter))
-        add_routes(app,'handler')
-        logging.info("Server started at 127.0.0.1...")
-        web.run_app(app,host='127.0.0.1',port= 8080)
+    await orm.create_pool(loop, host='127.0.0.1', port=3306, user='www-data', password='www-data', db='web_practice')
+    app=web.Application(loop=loop,middlewares=[logger_factory,response_factory])
+    init_jinja2(app,filters=dict(datetime=datetime_filter))
+    add_routes(app,'handlers')
+    add_static(app)
+    logging.info("Server started at 127.0.0.1...")
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner,'127.0.0.1',port=8080)
+    await site.start()
+
 
 
 def init_jinja2(app,**kw):
@@ -115,5 +120,8 @@ def datetime_filter(t):
     dt = datetime.fromtimestamp(t)
     return u'%s年%s月%s日' % (dt.year,dt.month,dt.day)
 
-
+if __name__ == "__main__":
+    loop=asyncio.get_event_loop()
+    loop.run_until_complete(init(loop))
+    loop.run_forever()
 
