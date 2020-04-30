@@ -40,7 +40,7 @@ def select(sql,args,size=None):#implement "select from"
         return rs
 
 @asyncio.coroutine
-def execute(sql,args): # delete insert update
+def execute(sql,args,autocommit=True): # delete insert update
     log(sql)
     with (yield from __pool) as conn:
         try:
@@ -48,7 +48,11 @@ def execute(sql,args): # delete insert update
             yield from cur.execute(sql.replace("?","%s"),args)
             affected=cur.rowcount
             yield from cur.close()
+            if not autocommit:
+                yield from conn.commit()
         except Exception as e:
+            if not autocommit:
+                yield from conn.rollback()
             raise
         return affected
 
@@ -92,7 +96,7 @@ class ModelMetaclass(type): # magic ...
         attrs['__insert__']="insert into `%s` (%s,`%s`) values (%s)" % (tableName,','.join(escaped_fields),
                                 primaryKey,create_args_string(len(escaped_fields)+1))
         attrs['__update__']='update `%s` set %s where `%s` =?' %(tableName,
-                                ", ".join(map(lambda f: "`%s=?" % (mappings.get(f).name or f),fields)),primaryKey)
+                                ", ".join(map(lambda f: "`%s`=?" % (mappings.get(f).name or f),fields)),primaryKey)
         attrs['__delete__']='delete from `%s` where `%s` =? '%(tableName,primaryKey)
         return type.__new__(cls,name,bases,attrs)
 

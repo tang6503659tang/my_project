@@ -11,12 +11,12 @@ async def index(request):
     return web.Response(body=b'<h1> Hello, my friends!</h1>',content_type="text/html")
 
 async def init(loop):
-    await orm.create_pool(loop, host='127.0.0.1', port=3306, user='www-data', password='www-data', db='web_practice')
+    await orm.create_pool(loop, host='127.0.0.1', port=3306, user='root', password='4everM0205', db='web_practice')
     app=web.Application(loop=loop,middlewares=[logger_factory,response_factory])
     init_jinja2(app,filters=dict(datetime=datetime_filter))
     add_routes(app,'handlers')
     add_static(app)
-    logging.info("Server started at 127.0.0.1...")
+    logging.info("Server started at 127.0.0.1:8080...")
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner,'127.0.0.1',port=8080)
@@ -49,7 +49,7 @@ def init_jinja2(app,**kw):
     if filters is not None:
         for name,f in filters.items():
             env.filters[name]=f
-    app["__tmeplating__"]=env
+    app["__template__"]=env
 
 async  def logger_factory(app,handler):
     async def logger(request):
@@ -72,7 +72,7 @@ async def data_factory(app,handler):
 async def response_factory(app,handler):
     async def response(request):
         logging.info('Response handler...')
-        r=handler(request)
+        r= await handler(request)
         if isinstance(r,web.StreamResponse):
             return r
         if isinstance(r,bytes):
